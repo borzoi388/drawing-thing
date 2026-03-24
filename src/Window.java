@@ -1,12 +1,11 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.ComponentEvent;
-import java.awt.event.ComponentListener;
+import java.awt.event.*;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Window {
-    boolean showGrid = true;
+    boolean showGrid = false;
 
     private JFrame window;
     private Canvas canvas;
@@ -41,6 +40,7 @@ public class Window {
         int offsetY;
         CanvasPanel() {
             addComponentListener(new ResizeListener());
+            addMouseListener(new PenListener());
         }
 
         void calculatePixelSize() {
@@ -92,19 +92,77 @@ public class Window {
             @Override
             public void componentHidden(ComponentEvent e) {}
         }
+
+        private class PenListener implements MouseListener {
+            boolean mouseDown = false;
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                mouseDown = false;
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                mouseDown = true;
+                Map<Pixel, Color> pixelsAltered = new HashMap<>();
+                while (mouseDown) {
+                    Point mousePos = getMousePosition();
+                    if (mousePos == null) return;
+                    if (!mouseDown) return;
+                    Pixel currPixel = checkPixel(mousePos);
+                    if (currPixel != null && !pixelsAltered.containsKey(currPixel)) {
+                        pixelsAltered.put(currPixel, currPixel.getColor());
+                        System.out.println(pixelsAltered.size());
+                    }
+                }
+                for (Pixel pixel : pixelsAltered.keySet()) {
+                    System.out.println(pixel);
+                }
+            }
+
+            private Pixel checkPixel(Point mousePos) {
+                if (mousePos.x > offsetX && mousePos.x < getWidth()-offsetX && mousePos.y < getHeight()-offsetY && mousePos.y > offsetY) {
+                    Pixel currPixel = canvas.getPixel((mousePos.y)/pixelSize, (mousePos.x-offsetX)/pixelSize);
+                    currPixel.setColor(Color.black);
+                    repaint();
+                    return currPixel;
+                } else {
+                    return null;
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                System.out.println("a");
+                mouseDown = false;
+
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent e) {
+
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+
+            }
+        }
     }
 
     private class ControlPanel extends JPanel {
         JTextField widthTextField, heightTextField;
-        JButton newCanvasBtn;
+        JButton newCanvasBtn, chooserToggleBtn;
         JColorChooser colorChooser;
+        boolean showChooser = false;
+
         ControlPanel() {
             widthTextField = new JTextField(defaultWidth+"", 4);
             heightTextField = new JTextField(defaultHeight+"", 4);
             colorChooser = new JColorChooser(Color.white);
-            colorChooser.
 
+            chooserToggleBtn = new JButton("Choose color...");
             newCanvasBtn = new JButton("New Canvas");
+            chooserToggleBtn.addActionListener(new chooserToggleListener());
             newCanvasBtn.addActionListener(new NewPaintingListener());
             setLayout(new FlowLayout());
             add(new JLabel("Width: "));
@@ -112,7 +170,7 @@ public class Window {
             add(new JLabel("Height: "));
             add(heightTextField);
             add(new JLabel("Background color: "));
-            add(colorChooser);
+            add(chooserToggleBtn);
             add(newCanvasBtn);
         }
 
@@ -129,6 +187,18 @@ public class Window {
                 } catch (Exception ex) {
                     System.out.println("Fialure");
                 }
+            }
+        }
+
+        private class chooserToggleListener implements ActionListener {
+            public void actionPerformed(ActionEvent e) {
+                if (showChooser) {
+                    remove(colorChooser);
+                } else {
+                    add(colorChooser);
+                }
+                showChooser = !showChooser;
+                repaint();
             }
         }
     }

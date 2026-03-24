@@ -27,4 +27,9 @@ public class Pixel {
     public int getCol() {
         return col;
     }
+
+    @Override
+    public String toString() {
+        return "Row: "+row+" Col: "+col+" Color: "+color;
+    }
 }
