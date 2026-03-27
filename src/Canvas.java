@@ -1,5 +1,5 @@
 import java.awt.*;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.List;
 
 public class Canvas {
@@ -8,16 +8,24 @@ public class Canvas {
     private Color bgColor;
     private int height;
     private int width;
+    private List<Map<Pixel, Color>> lastActions;
+
 
     Canvas(int h, int w, Color bg) {
+        resetCanvas(h,w,bg);
+    }
+
+    public void resetCanvas(int h, int w, Color bg) {
+        if (h < 1 || w < 1) return;
+        layers.clear();
         bgColor = bg;
         layers.add(new Layer(h, w, bg));
         layers.add(new Layer(h, w));
-        System.out.println(layers.getFirst().id);
         selectedLayer = layers.get(1);
         bgColor = bg;
         height = h;
         width = w;
+        lastActions = new ArrayList<>();
     }
 
     Pixel getPixel(int y, int x) {
@@ -40,4 +48,20 @@ public class Canvas {
         return width;
     }
 
+    Color getBgColor() {
+        return bgColor;
+    }
+
+    void setLastAction(Map<Pixel, Color> map) {
+        lastActions.add(map);
+    }
+
+    Map<Pixel, Color> getLastAction() {
+        try {
+            System.out.println(lastActions.size());
+            return lastActions.removeLast();
+        } catch (Exception e) {
+            return new HashMap<Pixel, Color>();
+        }
+    }
 }
