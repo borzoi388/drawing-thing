@@ -22,7 +22,7 @@ public class Window {
 
     JPanel panel = new JPanel();
     CanvasPanel canvasPanel;
-    PenSettingsPanel penSettingsPanel = new PenSettingsPanel();
+    PenSettingsPanel penSettingsPanel;
     
 
     Window(int h, int w) {
@@ -30,6 +30,7 @@ public class Window {
         window = new JFrame();
         canvas = new Canvas(defaultCanvas.getHeight(), defaultCanvas.getWidth(), defaultCanvas.getBgColor());
         canvasPanel = new BigCanvasPanel(canvas);
+        penSettingsPanel = new PenSettingsPanel();
 
         panel.setLayout(new BorderLayout());
         panel.add(canvasPanel, BorderLayout.CENTER);
@@ -42,6 +43,7 @@ public class Window {
         window.setLocationRelativeTo(null);
         window.setVisible(true);
     }
+
 
     private class CanvasPanel extends JPanel {
         int pixelSize;
@@ -131,22 +133,29 @@ public class Window {
 
             @Override
             public void mousePressed(MouseEvent e) {
+                int temp = 0;
                 mouseDown = true;
                 while (mouseDown) {
                     Point mousePos = getMousePosition();
                     if (mousePos == null) return;
                     Pixel currPixel = checkPixel(mousePos);
                     if (currPixel != null && !pixelsAltered.containsKey(currPixel)) {
-                        pixelsAltered.put(currPixel, new Color(currPixel.getColor().getRGB()));
+                        Color color = currPixel.getColor();
+                        pixelsAltered.put(currPixel, color == null ? null : new Color(color.getRGB()));
                         currPixel.setColor(penColor);
+                        temp++;
+                    }
+                    if (temp > 0) {
+                        canvas.clearRedo();
                     }
                 }
+
             }
 
             private Pixel checkPixel(Point mousePos) {
                 if (mousePos.x > offsetX && mousePos.x < getWidth()-offsetX && mousePos.y < getHeight()-offsetY && mousePos.y > offsetY) {
                     repaint();
-                    return myCanvas.getPixel((mousePos.y-offsetY)/pixelSize, (mousePos.x-offsetX)/pixelSize);
+                    return myCanvas.getSelectedLayer().getPixel((mousePos.y-offsetY)/pixelSize, (mousePos.x-offsetX)/pixelSize);
                 } else {
                     return null;
                 }
@@ -262,10 +271,8 @@ public class Window {
                 setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
                 bgColor = Color.white;
 
-                add(new JLabel("Width: "));
-                add(widthTextField);
-                add(new JLabel("Height: "));
-                add(heightTextField);
+                add(new LabeledInput(widthTextField, "Width: "));
+                add(new LabeledInput(heightTextField, "Height: "));
                 add(new JLabel("Background color: "));
                 add(colorChooser);
             }
@@ -297,15 +304,20 @@ public class Window {
     }
 
     private class PenSettingsPanel extends JPanel {
-        JButton undoButton, newCanvasBtn;
+        JButton undoButton, newCanvasBtn, redoBtn;
         SmallChooser colorChooser;
 
         PenSettingsPanel() {
-            setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
             undoButton = new JButton("Undo");
-            undoButton.addActionListener(new undoListener());
+            undoButton.addActionListener(new UndoListener());
+
+            redoBtn = new JButton("Redo");
+            redoBtn.addActionListener(new RedoListener());
+
             newCanvasBtn = new JButton("Blank canvas...");
-            newCanvasBtn.addActionListener(new newCanvasListener());
+            newCanvasBtn.addActionListener(new NewCanvasListener());
+
             colorChooser = new SmallChooser(Color.black);
             colorChooser.getSelectionModel().addChangeListener(_ -> {
                 penColor = colorChooser.getColor();
@@ -313,22 +325,86 @@ public class Window {
             });
             add(colorChooser);
             add(undoButton);
+            add(redoBtn);
+            add(new LayersPanel());
             add(newCanvasBtn);
         }
 
-        private class undoListener implements ActionListener {
+        private class LayersPanel extends JPanel {
+            LayersPanel() {
+                setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+                load();
+            }
+
+            private void load() {
+                removeAll();
+                for (int i = 0; i < canvas.getLayers().size(); i++) {
+                    LayerBtn btn = new LayerBtn(canvas.getLayers().get(i).getName(), (i == canvas.getSelectedIndex()));
+                    btn.addActionListener(new LayerListener(i));
+                    add(btn);
+                }
+            }
+
+            private void selectLayer(int index) {
+                canvas.selectLayer(index);
+                load();
+                validate();
+            }
+
+            private class LayerBtn extends JButton {
+                public LayerBtn(String name, boolean isSelected) {
+                    super(name);
+                    if (isSelected) {
+                        setForeground(Color.blue);
+                    }
+                }
+            }
+
+            private class LayerListener implements ActionListener {
+                int index;
+                LayerListener(int i) {
+                    index = i;
+                }
+                public void actionPerformed(ActionEvent e) {
+                    selectLayer(index);
+                    repaint();
+                }
+            }
+        }
+
+        private Map<Pixel, Color> performAction(Map<Pixel, Color> map) {
+            Map<Pixel, Color> undoAction = new HashMap<>();
+
+            for (Pixel pixel : map.keySet()) {
+                Color prevColor = pixel.getColor();
+                pixel.setColor(map.get(pixel));
+                undoAction.put(pixel, prevColor);
+            }
+
+            return undoAction;
+        }
+
+        private class UndoListener implements ActionListener {
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                Map<Pixel, Color> lastAction = canvas.getLastAction();
-                for (Pixel pixel : lastAction.keySet()) {
-                    pixel.setColor(lastAction.get(pixel));
-                }
+                canvas.addRedoAction(performAction(canvas.getLastAction()));
+
                 canvasPanel.repaint();
             }
         }
 
-        private class newCanvasListener implements ActionListener {
+        private class RedoListener implements ActionListener {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                canvas.setLastAction(performAction(canvas.getRedoAction()));
+
+                canvasPanel.repaint();
+            }
+        }
+
+        private class NewCanvasListener implements ActionListener {
 
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -353,6 +429,16 @@ public class Window {
             setOpaque(true);
             revalidate();
             repaint();
+        }
+    }
+
+    private class LabeledInput extends JPanel {
+        JTextField textField;
+        LabeledInput(JTextField textField, String text) {
+            this.textField = textField;
+            setLayout(new GridLayout());
+            add(new JLabel(text));
+            add(textField);
         }
     }
 

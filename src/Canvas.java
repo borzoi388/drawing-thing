@@ -4,11 +4,12 @@ import java.util.List;
 
 public class Canvas {
     private List<Layer> layers = new LinkedList<>();
-    private Layer selectedLayer;
+    private int selectedLayer;
     private Color bgColor;
     private int height;
     private int width;
     private List<Map<Pixel, Color>> lastActions;
+    private List<Map<Pixel, Color>> redoActions;
 
 
     Canvas(int h, int w, Color bg) {
@@ -19,13 +20,14 @@ public class Canvas {
         if (h < 1 || w < 1) return;
         layers.clear();
         bgColor = bg;
-        layers.add(new Layer(h, w, bg));
-        layers.add(new Layer(h, w));
-        selectedLayer = layers.get(1);
+        layers.add(new Layer(h, w, bg, "Background"));
+        layers.add(new Layer(h, w, null, "Layer 1"));
+        selectedLayer = 1;
         bgColor = bg;
         height = h;
         width = w;
         lastActions = new ArrayList<>();
+        redoActions = new ArrayList<>();
     }
 
     Pixel getPixel(int y, int x) {
@@ -58,10 +60,41 @@ public class Canvas {
 
     Map<Pixel, Color> getLastAction() {
         try {
-            System.out.println(lastActions.size());
             return lastActions.removeLast();
         } catch (Exception e) {
-            return new HashMap<Pixel, Color>();
+            return new HashMap<>();
         }
+    }
+
+    public void addRedoAction(Map<Pixel, Color> map) {
+        redoActions.add(map);
+    }
+
+    public void clearRedo() {
+        redoActions.clear();
+    }
+
+    public Map<Pixel, Color> getRedoAction() {
+        try {
+            return redoActions.removeLast();
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
+    }
+
+    public List<Layer> getLayers() {
+        return layers;
+    }
+
+    public void selectLayer(int i) {
+        selectedLayer = i;
+    }
+
+    public Layer getSelectedLayer() {
+        return layers.get(selectedLayer);
+    }
+
+    public int getSelectedIndex() {
+        return selectedLayer;
     }
 }
