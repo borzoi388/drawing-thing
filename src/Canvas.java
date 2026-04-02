@@ -3,8 +3,7 @@ import java.util.*;
 import java.util.List;
 
 public class Canvas {
-    private List<Layer> layers = new LinkedList<>();
-    private int selectedLayer;
+    public Layers layerThing;
     private Color bgColor;
     private int height;
     private int width;
@@ -18,11 +17,11 @@ public class Canvas {
 
     public void resetCanvas(int h, int w, Color bg) {
         if (h < 1 || w < 1) return;
-        layers.clear();
+        layerThing = new Layers();
+        layerThing.layers.clear();
         bgColor = bg;
-        layers.add(new Layer(h, w, bg, "Background"));
-        layers.add(new Layer(h, w, null, "Layer 1"));
-        selectedLayer = 1;
+        layerThing.layers.add(new Layer(h, w, bg, "Background"));
+        layerThing.layers.add(new Layer(h, w, null, "Layer 1"));
         bgColor = bg;
         height = h;
         width = w;
@@ -31,15 +30,15 @@ public class Canvas {
     }
 
     Pixel getPixel(int y, int x) {
-        for (int i = layers.size()-1; i >= 0; i--) {
-            if (layers.get(i).hasInitialized()) {
-                Pixel pixel = layers.get(i).getPixel(y, x);
+        for (int i = layerThing.layers.size()-1; i >= 0; i--) {
+            if (layerThing.layers.get(i).hasInitialized()) {
+                Pixel pixel = layerThing.layers.get(i).getPixel(y, x);
                 if (pixel.getColor() != null) {
                     return pixel;
                 }
             }
         }
-        return layers.getFirst().getPixel(y, x);
+        return layerThing.layers.getFirst().getPixel(y, x);
     }
 
     int getHeight() {
@@ -82,19 +81,44 @@ public class Canvas {
         }
     }
 
-    public List<Layer> getLayers() {
-        return layers;
-    }
-
-    public void selectLayer(int i) {
-        selectedLayer = i;
-    }
-
     public Layer getSelectedLayer() {
-        return layers.get(selectedLayer);
+        return layerThing.layers.get(layerThing.getSelectedIndex());
     }
 
-    public int getSelectedIndex() {
-        return selectedLayer;
+    public class Layers extends Selectable {
+        List<Layer> layers = new LinkedList<>();
+
+        Layers() {
+            selectedIndex = 1;
+        }
+        @Override
+        public List<String> getSelectables() {
+            List<String> names = new ArrayList<>();
+            for (Layer layer : layers) {
+                names.add(layer.getName());
+            }
+            return names;
+        }
+
+        public void deleteSelectedLayer() {
+            if (layers.size()>2) {
+                layers.remove(selectedIndex);
+                if (selectedIndex != 1) {
+                    selectedIndex--;
+                    System.out.println(selectedIndex);
+                }
+            }
+        }
+
+        public void addLayer() {
+            layers.add(selectedIndex+1, new Layer(height, width, null, "Layer "+(layers.size())));
+            selectedIndex++;
+        }
+
+        public void duplicateSelectedLayer() {
+            layers.add(selectedIndex+1, new Layer(layers.get(selectedIndex)));
+            selectedIndex++;
+            layers.get(selectedIndex).setName(layers.get(selectedIndex).getName()+" copy");
+        }
     }
 }

@@ -1,12 +1,12 @@
 
-import javax.print.Doc;
 import javax.swing.*;
-import javax.swing.border.Border;
 import javax.swing.colorchooser.AbstractColorChooserPanel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,7 +17,8 @@ public class Window {
     private Canvas canvas;
     private Canvas defaultCanvas = new Canvas(20, 20, Color.white);
 
-    private Color penColor = Color.black;
+
+    private Pen pen = new Pen();
 
 
     JPanel panel = new JPanel();
@@ -118,35 +119,26 @@ public class Window {
     private class BigCanvasPanel extends CanvasPanel {
         BigCanvasPanel(Canvas myCanvas) {
             super(myCanvas);
-            addMouseListener(new PenListener());
+            addMouseListener(new PenDownListener());
         }
 
-        private class PenListener implements MouseListener {
-            boolean mouseDown = false;
-            Map<Pixel, Color> pixelsAltered = new HashMap<>();
+
+        private class PenDownListener implements MouseListener {
+            volatile private boolean mouseDown = false;
+            volatile private boolean isRunning = false;
+            volatile Map<Pixel, Color> pixelsAltered = new HashMap<>();
 
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                mouseDown = false;
             }
 
             @Override
             public void mousePressed(MouseEvent e) {
-                int temp = 0;
-                mouseDown = true;
-                while (mouseDown) {
-                    Point mousePos = getMousePosition();
-                    if (mousePos == null) return;
-                    Pixel currPixel = checkPixel(mousePos);
-                    if (currPixel != null && !pixelsAltered.containsKey(currPixel)) {
-                        Color color = currPixel.getColor();
-                        pixelsAltered.put(currPixel, color == null ? null : new Color(color.getRGB()));
-                        currPixel.setColor(penColor);
-                        temp++;
-                    }
-                    if (temp > 0) {
-                        canvas.clearRedo();
+                if (e.getButton() == MouseEvent.BUTTON1) {
+                    if (!mouseDown) {
+                        mouseDown = true;
+                        penDown();
                     }
                 }
 
@@ -161,12 +153,55 @@ public class Window {
                 }
             }
 
+            private synchronized boolean check() {
+                if (isRunning) return false;
+                isRunning = true;
+                return true;
+            }
+
+            private void draw(Point mousePos, boolean isLast) {
+                new Thread(() -> {
+                    int temp = 0;
+                    if (mousePos == null) return;
+                    Pixel currPixel = checkPixel(mousePos);
+                    if (currPixel != null && !pixelsAltered.containsKey(currPixel)) {
+                        Color color = currPixel.getColor();
+                        pixelsAltered.put(currPixel, color == null ? null : new Color(color.getRGB()));
+                        currPixel.setColor(pen.types[pen.selectedIndex].getColor());
+                        temp++;
+                    }
+                    if (temp > 0) {
+                        canvas.clearRedo();
+                    }
+                    if (isLast) {
+                        myCanvas.setLastAction(pixelsAltered);
+                        pixelsAltered = new HashMap<>();
+                    }
+                }).start();
+            }
+
+            private void penDown() {
+                if (check()) {
+                    new Thread(() -> {
+                        mouseDown = true;
+                        while (mouseDown) {
+                            draw(getMousePosition(), false);
+                        }
+                        draw(getMousePosition(), true);
+                    }).start();
+                }
+            }
+
+            private void release(MouseEvent e) {
+                if (isRunning && e.getButton() == MouseEvent.BUTTON1) {
+                    mouseDown = false;
+                    isRunning = false;
+                }
+            }
+
             @Override
             public void mouseReleased(MouseEvent e) {
-                mouseDown = false;
-                myCanvas.setLastAction(pixelsAltered);
-                pixelsAltered = new HashMap<>();
-
+                release(e);
             }
 
             @Override
@@ -176,7 +211,7 @@ public class Window {
 
             @Override
             public void mouseExited(MouseEvent e) {
-
+                release(e);
             }
         }
     }
@@ -219,7 +254,6 @@ public class Window {
             }
 
             colorChooser.getSelectionModel().addChangeListener(_ -> {
-                System.out.println("Hi");
                 updateCanvas();
             });
 
@@ -269,7 +303,7 @@ public class Window {
         private class SettingsPanel extends JPanel {
             SettingsPanel() {
                 setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
-                bgColor = Color.white;
+                bgColor = defaultCanvas.getBgColor();
 
                 add(new LabeledInput(widthTextField, "Width: "));
                 add(new LabeledInput(heightTextField, "Height: "));
@@ -297,6 +331,7 @@ public class Window {
                     if (isValid > 0) return;
                     canvas = new Canvas(Integer.parseInt(heightTextField.getText()), Integer.parseInt(widthTextField.getText()), bgColor);
                     canvasPanel.rerouteCanvas(canvas);
+                    penSettingsPanel.layersSection.layersPanel = new SelectablePanel(canvas.layerThing, SelectablePanel.BOX);
                     dispose();
                 }
             }
@@ -306,6 +341,8 @@ public class Window {
     private class PenSettingsPanel extends JPanel {
         JButton undoButton, newCanvasBtn, redoBtn;
         SmallChooser colorChooser;
+        LayersSection layersSection = new LayersSection();
+        SelectablePanel penPanel = new SelectablePanel(pen, SelectablePanel.FLOW);
 
         PenSettingsPanel() {
             setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -320,55 +357,42 @@ public class Window {
 
             colorChooser = new SmallChooser(Color.black);
             colorChooser.getSelectionModel().addChangeListener(_ -> {
-                penColor = colorChooser.getColor();
-
+                pen.penColor = colorChooser.getColor();
             });
             add(colorChooser);
+            add(penPanel);
             add(undoButton);
             add(redoBtn);
-            add(new LayersPanel());
+            add(layersSection);
             add(newCanvasBtn);
         }
 
-        private class LayersPanel extends JPanel {
-            LayersPanel() {
-                setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-                load();
-            }
+        private class LayersSection extends JPanel {
+            JButton newLayerBtn = new JButton("New Layer"), deleteLayerBtn = new JButton("Delete"), duplicateBtn = new JButton("Duplicate");
+            JPanel buttonPanel = new JPanel();
+            SelectablePanel layersPanel = new SelectablePanel(canvas.layerThing, SelectablePanel.BOX);
+            LayersSection() {
+                setLayout(new BorderLayout());
 
-            private void load() {
-                removeAll();
-                for (int i = 0; i < canvas.getLayers().size(); i++) {
-                    LayerBtn btn = new LayerBtn(canvas.getLayers().get(i).getName(), (i == canvas.getSelectedIndex()));
-                    btn.addActionListener(new LayerListener(i));
-                    add(btn);
-                }
-            }
+                newLayerBtn.addActionListener(_ -> {
+                    canvas.layerThing.addLayer();
+                    layersPanel.load();
+                });
+                deleteLayerBtn.addActionListener(_ -> {
+                    canvas.layerThing.deleteSelectedLayer();
+                    layersPanel.load();
+                });
+                duplicateBtn.addActionListener(_ -> {
+                    canvas.layerThing.duplicateSelectedLayer();
+                    layersPanel.load();
+                });
 
-            private void selectLayer(int index) {
-                canvas.selectLayer(index);
-                load();
-                validate();
-            }
-
-            private class LayerBtn extends JButton {
-                public LayerBtn(String name, boolean isSelected) {
-                    super(name);
-                    if (isSelected) {
-                        setForeground(Color.blue);
-                    }
+                buttonPanel.setLayout(new FlowLayout());
+                for (JButton btn : new JButton[]{newLayerBtn, deleteLayerBtn, duplicateBtn}) {
+                    buttonPanel.add(btn);
                 }
-            }
-
-            private class LayerListener implements ActionListener {
-                int index;
-                LayerListener(int i) {
-                    index = i;
-                }
-                public void actionPerformed(ActionEvent e) {
-                    selectLayer(index);
-                    repaint();
-                }
+                add(buttonPanel, BorderLayout.CENTER);
+                add(layersPanel, BorderLayout.SOUTH);
             }
         }
 
@@ -388,7 +412,10 @@ public class Window {
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                canvas.addRedoAction(performAction(canvas.getLastAction()));
+                Map<Pixel, Color> lastAction = canvas.getLastAction();
+                if (!lastAction.isEmpty()) {
+                    canvas.addRedoAction(performAction(lastAction));
+                }
 
                 canvasPanel.repaint();
             }
@@ -398,8 +425,10 @@ public class Window {
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                canvas.setLastAction(performAction(canvas.getRedoAction()));
-
+                Map<Pixel, Color> redoAction = canvas.getRedoAction();
+                if (!redoAction.isEmpty()) {
+                    canvas.setLastAction(performAction(redoAction));
+                }
                 canvasPanel.repaint();
             }
         }
@@ -412,6 +441,60 @@ public class Window {
             }
         }
     }
+
+    private class Pen extends Selectable {
+        public Color penColor;
+        public int size;
+
+        private PenType[] types = new PenType[4];
+
+        Pen() {
+            penColor = Color.black;
+            size = 1;
+            types[0] = new PenType("Pen", false, false);
+            types[1] = new PenType("Eraser", true, false);
+            types[2] = new PenType("Fill", false, true);
+            types[3] = new PenType("Eraser Fill", true, true);
+        }
+
+        @Override
+        public List<String> getSelectables() {
+            List<String> names = new ArrayList<>();
+            for (PenType type : types) {
+                names.add(type.name);
+            }
+            return names;
+        }
+        public class PenType {
+            String name;
+            int size;
+            boolean eraser;
+            boolean fill;
+
+            PenType(String name, boolean eraser, boolean fill) {
+                this.name = name;
+                size = 1;
+                this.fill = fill;
+                this.eraser = eraser;
+            }
+
+            public Color getColor() {
+                if (eraser) {
+                    return null;
+                } else return penColor;
+            }
+
+            void setSize(int size) {
+                this.size = size;
+            }
+
+            void incrementSize(int inc) {
+                this.size+=inc;
+            }
+        }
+    }
+
+    /////////// Styling n other abstract stuff //////////
 
     private class SmallChooser extends JColorChooser {
         SmallChooser(Color color) {
@@ -442,4 +525,49 @@ public class Window {
         }
     }
 
+    private class SelectablePanel extends JPanel {
+        static int FLOW = 0;
+        static int BOX = 1;
+        Selectable thing;
+        LayoutManager[] mgrs = {new FlowLayout(), new BoxLayout(this, BoxLayout.Y_AXIS)};
+
+        SelectablePanel(Selectable thing, int layout) {
+            this.thing = thing;
+            setLayout(mgrs[layout]);
+            load();
+        }
+
+        public void load() {
+            removeAll();
+            for (int i = thing.getSelectables().size()-1; i >= 0; i--) {
+                SelectBtn btn = new SelectBtn(thing.getSelectables().get(i), (i == thing.getSelectedIndex()));
+                btn.addActionListener(new SelectListener(i));
+                add(btn);
+            }
+            validate();
+            repaint();
+            canvasPanel.repaint();
+        }
+
+        private class SelectBtn extends JButton {
+            public SelectBtn(String name, boolean isSelected) {
+                super(name);
+                if (isSelected) {
+                    setForeground(Color.blue);
+                }
+            }
+        }
+
+        private class SelectListener implements ActionListener {
+            int index;
+            SelectListener(int i) {
+                index = i;
+            }
+            public void actionPerformed(ActionEvent e) {
+                thing.select(index);
+                load();
+                repaint();
+            }
+        }
+    }
 }
