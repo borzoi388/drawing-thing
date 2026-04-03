@@ -5,10 +5,8 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
 
 public class Window {
     boolean showGrid = false;
@@ -38,7 +36,7 @@ public class Window {
         panel.add(penSettingsPanel, BorderLayout.WEST);
 
         window.getContentPane().add(panel);
-        window.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         window.setTitle("DrawingThing");
         window.setSize(w, h);
         window.setLocationRelativeTo(null);
@@ -88,13 +86,8 @@ public class Window {
         private void drawPixel(Graphics pen, Pixel pixel) {
             int col = pixel.getCol()*pixelSize+offsetX;
             int row = pixel.getRow()*pixelSize+offsetY;
-            if (showGrid) {
-                pen.setColor(pixel.getColor());
-                pen.fillRect(col + 1, row + 1, pixelSize - 2, pixelSize - 2);
-            } else {
-                pen.setColor(pixel.getColor());
-                pen.fillRect(col, row, pixelSize, pixelSize);
-            }
+            pen.setColor(pixel.getColor());
+            pen.fillRect(col, row, pixelSize, pixelSize);
         }
 
         private class ResizeListener implements ComponentListener {
@@ -119,11 +112,13 @@ public class Window {
     private class BigCanvasPanel extends CanvasPanel {
         BigCanvasPanel(Canvas myCanvas) {
             super(myCanvas);
-            addMouseListener(new PenDownListener());
+            PenDownListener l = new PenDownListener();
+            addMouseListener(l);
+            addMouseMotionListener(l);
         }
 
 
-        private class PenDownListener implements MouseListener {
+        private class PenDownListener implements MouseListener, MouseMotionListener {
             volatile private boolean mouseDown = false;
             volatile private boolean isRunning = false;
             volatile Map<Pixel, Color> pixelsAltered = new HashMap<>();
@@ -138,7 +133,7 @@ public class Window {
                 if (e.getButton() == MouseEvent.BUTTON1) {
                     if (!mouseDown) {
                         mouseDown = true;
-                        penDown();
+                        penDown(pen.selectedIndex);
                     }
                 }
 
@@ -148,6 +143,15 @@ public class Window {
                 if (mousePos.x > offsetX && mousePos.x < getWidth()-offsetX && mousePos.y < getHeight()-offsetY && mousePos.y > offsetY) {
                     repaint();
                     return myCanvas.getSelectedLayer().getPixel((mousePos.y-offsetY)/pixelSize, (mousePos.x-offsetX)/pixelSize);
+                } else {
+                    return null;
+                }
+            }
+
+            private Pixel checkTopPixel(Point mousePos) {
+                if (mousePos.x > offsetX && mousePos.x < getWidth()-offsetX && mousePos.y < getHeight()-offsetY && mousePos.y > offsetY) {
+                    repaint();
+                    return myCanvas.getPixel((mousePos.y-offsetY)/pixelSize, (mousePos.x-offsetX)/pixelSize);
                 } else {
                     return null;
                 }
@@ -165,9 +169,8 @@ public class Window {
                     if (mousePos == null) return;
                     Pixel currPixel = checkPixel(mousePos);
                     if (currPixel != null && !pixelsAltered.containsKey(currPixel)) {
-                        Color color = currPixel.getColor();
-                        pixelsAltered.put(currPixel, color == null ? null : new Color(color.getRGB()));
-                        currPixel.setColor(pen.types[pen.selectedIndex].getColor());
+                        pixelsAltered.put(currPixel, currPixel.getColor());
+                        currPixel.setColor(pen.getPenColor());
                         temp++;
                     }
                     if (temp > 0) {
@@ -180,14 +183,16 @@ public class Window {
                 }).start();
             }
 
-            private void penDown() {
+            private void penDown(int type) {
                 if (check()) {
                     new Thread(() -> {
-                        mouseDown = true;
-                        while (mouseDown) {
-                            draw(getMousePosition(), false);
+                        if (type < 2) {
+                            mouseDown = true;
+                            while (mouseDown) {
+                                draw(getMousePosition(), false);
+                            }
+                            draw(getMousePosition(), true);
                         }
-                        draw(getMousePosition(), true);
                     }).start();
                 }
             }
@@ -212,6 +217,24 @@ public class Window {
             @Override
             public void mouseExited(MouseEvent e) {
                 release(e);
+            }
+
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (pen.types[pen.selectedIndex].colorpick) {
+                    try {
+                        Color temp = checkTopPixel(e.getPoint()).getColor();
+                        System.out.println(temp);
+                        penSettingsPanel.colorChooser.setColor(temp);
+                        pen.penColor = temp;
+                    } catch (Exception _) {}
+                }
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+
             }
         }
     }
@@ -331,7 +354,9 @@ public class Window {
                     if (isValid > 0) return;
                     canvas = new Canvas(Integer.parseInt(heightTextField.getText()), Integer.parseInt(widthTextField.getText()), bgColor);
                     canvasPanel.rerouteCanvas(canvas);
-                    penSettingsPanel.layersSection.layersPanel = new SelectablePanel(canvas.layerThing, SelectablePanel.BOX);
+                    penSettingsPanel.layersSection.layersPanel.thing = canvas.layerThing;
+                    penSettingsPanel.layersSection.layersPanel.load();
+                    penSettingsPanel.repaint();
                     dispose();
                 }
             }
@@ -375,15 +400,15 @@ public class Window {
                 setLayout(new BorderLayout());
 
                 newLayerBtn.addActionListener(_ -> {
-                    canvas.layerThing.addLayer();
+                    canvas.addLayer();
                     layersPanel.load();
                 });
                 deleteLayerBtn.addActionListener(_ -> {
-                    canvas.layerThing.deleteSelectedLayer();
+                    canvas.deleteLayer();
                     layersPanel.load();
                 });
                 duplicateBtn.addActionListener(_ -> {
-                    canvas.layerThing.duplicateSelectedLayer();
+                    canvas.duplicateLayer();
                     layersPanel.load();
                 });
 
@@ -446,15 +471,20 @@ public class Window {
         public Color penColor;
         public int size;
 
-        private PenType[] types = new PenType[4];
+        private PenType[] types = new PenType[5];
 
         Pen() {
             penColor = Color.black;
             size = 1;
-            types[0] = new PenType("Pen", false, false);
-            types[1] = new PenType("Eraser", true, false);
-            types[2] = new PenType("Fill", false, true);
-            types[3] = new PenType("Eraser Fill", true, true);
+            types[0] = new PenType("Pen", false, false, false);
+            types[1] = new PenType("Eraser", true, false, false);
+            types[2] = new PenType("Fill", false, true, false);
+            types[3] = new PenType("Eraser Fill", true, true, false);
+            types[4] = new PenType("Colorpick", false, false, true);
+        }
+
+        public Color getPenColor() {
+            return types[selectedIndex].getColor();
         }
 
         @Override
@@ -470,12 +500,15 @@ public class Window {
             int size;
             boolean eraser;
             boolean fill;
+            boolean colorpick;
 
-            PenType(String name, boolean eraser, boolean fill) {
+            PenType(String name, boolean eraser, boolean fill, boolean colorpick) {
                 this.name = name;
                 size = 1;
                 this.fill = fill;
                 this.eraser = eraser;
+                this.colorpick = colorpick;
+
             }
 
             public Color getColor() {
@@ -499,9 +532,6 @@ public class Window {
     private class SmallChooser extends JColorChooser {
         SmallChooser(Color color) {
             super(color);
-            Dimension maxSize = new Dimension();
-            maxSize.setSize(400, 400);
-            setMaximumSize(maxSize);
             setPreviewPanel(new JPanel());
             AbstractColorChooserPanel thingy = getChooserPanels()[2];
             for (AbstractColorChooserPanel panel : getChooserPanels()) {
@@ -528,6 +558,7 @@ public class Window {
     private class SelectablePanel extends JPanel {
         static int FLOW = 0;
         static int BOX = 1;
+
         Selectable thing;
         LayoutManager[] mgrs = {new FlowLayout(), new BoxLayout(this, BoxLayout.Y_AXIS)};
 
@@ -543,9 +574,12 @@ public class Window {
                 SelectBtn btn = new SelectBtn(thing.getSelectables().get(i), (i == thing.getSelectedIndex()));
                 btn.addActionListener(new SelectListener(i));
                 add(btn);
+                repaint();
             }
+
             validate();
             repaint();
+            revalidate();
             canvasPanel.repaint();
         }
 

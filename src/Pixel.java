@@ -10,10 +10,8 @@ public class Pixel {
         this.row = r;
         this.col = c;
     }
-    Color setColor(Color newColor) {
-        Color temp = color;
+    void setColor(Color newColor) {
         color = newColor;
-        return temp;
     }
 
     public Color getColor() {

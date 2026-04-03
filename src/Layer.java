@@ -30,6 +30,7 @@ public class Layer {
     }
 
     public Pixel getPixel(int y, int x) {
+        if (y >= layer.length || x >= layer.length) { return null; }
         return layer[y][x];
     }
 
