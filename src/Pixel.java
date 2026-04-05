@@ -4,14 +4,20 @@ public class Pixel {
     private Color color;
     private int row;
     private int col;
+    private Layer layer;
 
-    Pixel(Color color, int r, int c) {
+    Pixel(Color color, int r, int c, Layer layer) {
         this.color = color;
         this.row = r;
         this.col = c;
+        this.layer = layer;
     }
     void setColor(Color newColor) {
         color = newColor;
+    }
+
+    Layer getLayer() {
+        return layer;
     }
 
     public Color getColor() {

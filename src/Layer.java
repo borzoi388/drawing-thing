@@ -11,7 +11,7 @@ public class Layer {
         this.size = new Dimension(w, h);
         for (int i = 0; i < h; i++) {
             for (int j = 0; j < w; j++) {
-                layer[i][j] = new Pixel(color, i, j);
+                layer[i][j] = new Pixel(color, i, j, this);
             }
         }
     }
@@ -24,7 +24,7 @@ public class Layer {
         this.size = layer.getSize();
         for (int i = 0; i < h; i++) {
             for (int j = 0; j < w; j++) {
-                this.layer[i][j] = new Pixel(layer.getPixel(i,j).getColor(), i, j);
+                this.layer[i][j] = new Pixel(layer.getPixel(i,j).getColor(), i, j, this);
             }
         }
     }

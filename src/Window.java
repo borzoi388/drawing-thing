@@ -365,6 +365,7 @@ public class Window {
 
     private class PenSettingsPanel extends JPanel {
         JButton undoButton, newCanvasBtn, redoBtn;
+        JSlider penSizeSlider;
         SmallChooser colorChooser;
         LayersSection layersSection = new LayersSection();
         SelectablePanel penPanel = new SelectablePanel(pen, SelectablePanel.FLOW);
@@ -373,6 +374,11 @@ public class Window {
             setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
             undoButton = new JButton("Undo");
             undoButton.addActionListener(new UndoListener());
+
+            penSizeSlider = new JSlider(JSlider.HORIZONTAL,1,9,1);
+            penSizeSlider.setMajorTickSpacing(2);
+            penSizeSlider.setSnapToTicks(true);
+            penSizeSlider.addChangeListener(_ -> pen.setSize(penSizeSlider.getValue()));
 
             redoBtn = new JButton("Redo");
             redoBtn.addActionListener(new RedoListener());
@@ -386,6 +392,7 @@ public class Window {
             });
             add(colorChooser);
             add(penPanel);
+            add(penSizeSlider);
             add(undoButton);
             add(redoBtn);
             add(layersSection);
@@ -485,6 +492,10 @@ public class Window {
 
         public Color getPenColor() {
             return types[selectedIndex].getColor();
+        }
+
+        public void setSize(int s) {
+            types[selectedIndex].setSize(s);
         }
 
         @Override

@@ -99,6 +99,21 @@ public class Canvas {
         return layerThing.layers.get(layerThing.getSelectedIndex()+1);
     }
 
+    public List<Pixel> getNeighborPixels(Pixel pixel, int size) {
+        if (size == 0) return new ArrayList<>(List.of(new Pixel[]{pixel}));
+        List<Pixel> pixels = new ArrayList<>();
+        int row = pixel.getRow();
+        int col = pixel.getCol();
+        for (int r = row-size; r <= row+size; r++) {
+            for (int c = col-size; c <= col+size; c++) {
+                try {
+                    pixels.add(pixel.getLayer().getPixel(r,c));
+                } catch (Exception _) {}
+            }
+        }
+        return pixels;
+    }
+
     public class Layers extends Selectable {
         List<Layer> layers = new LinkedList<>();
 
@@ -133,6 +148,7 @@ public class Canvas {
             selectedIndex++;
             layers.get(selectedIndex).setName(layers.get(selectedIndex).getName()+" copy");
         }
+
 
         @Override
         public void select(int num) {
