@@ -9,8 +9,6 @@ import java.util.*;
 import java.util.List;
 
 public class Window {
-    boolean showGrid = false;
-
     private JFrame window;
     private Canvas canvas;
     private Canvas defaultCanvas = new Canvas(20, 20, Color.white);
@@ -131,9 +129,15 @@ public class Window {
             @Override
             public void mousePressed(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1) {
-                    if (!mouseDown) {
+                    if (pen.isFilling()) {
+                        if (pen.isFilling()) {
+                            Pixel pxl = checkPixel(e.getPoint());
+                            if (pxl == null) return;
+                            myCanvas.setLastAction(fill(pxl, pxl.getColor()));
+                        }
+                    } else if (!mouseDown) {
                         mouseDown = true;
-                        penDown(pen.selectedIndex);
+                        penDown(pen.getSelectedIndex());
                     }
                 }
 
@@ -163,24 +167,40 @@ public class Window {
                 return true;
             }
 
-            private void draw(Point mousePos, boolean isLast) {
+            private void draw(Point mousePos) {
                 new Thread(() -> {
                     int temp = 0;
                     if (mousePos == null) return;
                     Pixel currPixel = checkPixel(mousePos);
-                    if (currPixel != null && !pixelsAltered.containsKey(currPixel)) {
-                        pixelsAltered.put(currPixel, currPixel.getColor());
-                        currPixel.setColor(pen.getPenColor());
+                    if (currPixel == null) return;
+                    for (Pixel pixel:canvas.getNeighborPixels(currPixel, (pen.getSize()-1)/2)) {
+                        if (!pixelsAltered.containsKey(pixel)) {
+                            pixelsAltered.put(pixel, colorPixel(pixel, pen.getPenColor()));
+                        }
                         temp++;
                     }
                     if (temp > 0) {
                         canvas.clearRedo();
                     }
-                    if (isLast) {
-                        myCanvas.setLastAction(pixelsAltered);
-                        pixelsAltered = new HashMap<>();
-                    }
                 }).start();
+            }
+
+            private Color colorPixel(Pixel pixel, Color color) {
+                Color temp = pixel.getColor();
+                pixel.setColor(color);
+                return temp;
+            }
+
+            private HashMap<Pixel, Color> fill(Pixel pixel, Color color) {
+                HashMap<Pixel, Color> filled = new HashMap<>();
+                for (Pixel pxl : canvas.getNeighborPixels(pixel, -1)) {
+                    if (pxl.getColor() == color) {
+                        filled.put(pxl, colorPixel(pxl, pen.getPenColor()));
+                        filled.putAll(fill(pxl, color));
+                    }
+                }
+                System.out.println(filled.size());
+                return filled;
             }
 
             private void penDown(int type) {
@@ -189,9 +209,8 @@ public class Window {
                         if (type < 2) {
                             mouseDown = true;
                             while (mouseDown) {
-                                draw(getMousePosition(), false);
+                                draw(getMousePosition());
                             }
-                            draw(getMousePosition(), true);
                         }
                     }).start();
                 }
@@ -201,6 +220,11 @@ public class Window {
                 if (isRunning && e.getButton() == MouseEvent.BUTTON1) {
                     mouseDown = false;
                     isRunning = false;
+                    try {
+                        Thread.sleep(10);
+                    } catch (Exception ex) {}
+                    myCanvas.setLastAction(pixelsAltered);
+                    pixelsAltered = new HashMap<>();
                 }
             }
 
@@ -222,10 +246,9 @@ public class Window {
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (pen.types[pen.selectedIndex].colorpick) {
+                if (pen.types[pen.getSelectedIndex()].colorpick) {
                     try {
                         Color temp = checkTopPixel(e.getPoint()).getColor();
-                        System.out.println(temp);
                         penSettingsPanel.colorChooser.setColor(temp);
                         pen.penColor = temp;
                     } catch (Exception _) {}
@@ -476,18 +499,22 @@ public class Window {
 
     private class Pen extends Selectable {
         public Color penColor;
-        public int size;
 
-        private PenType[] types = new PenType[5];
+        private final PenType[] types = new PenType[5];
 
         Pen() {
             penColor = Color.black;
-            size = 1;
+            selectedIndex = 0;
             types[0] = new PenType("Pen", false, false, false);
             types[1] = new PenType("Eraser", true, false, false);
             types[2] = new PenType("Fill", false, true, false);
             types[3] = new PenType("Eraser Fill", true, true, false);
             types[4] = new PenType("Colorpick", false, false, true);
+        }
+
+        public boolean isFilling() {
+            System.out.println(types[selectedIndex].fill);
+            return types[selectedIndex].fill;
         }
 
         public Color getPenColor() {
@@ -506,6 +533,11 @@ public class Window {
             }
             return names;
         }
+
+        public int getSize() {
+            return types[selectedIndex].size;
+        }
+
         public class PenType {
             String name;
             int size;
@@ -536,9 +568,18 @@ public class Window {
                 this.size+=inc;
             }
         }
+        public void select(int num) {
+            super.select(num);
+            if (penSettingsPanel == null) return;
+            penSettingsPanel.penSizeSlider.setValue(types[selectedIndex].size);
+            penSettingsPanel.repaint();
+        }
+        public int getSelectedIndex() {
+            return super.getSelectedIndex();
+        }
     }
 
-    /////////// Styling n other abstract stuff //////////
+    /////////// Styling n other stuff //////////
 
     private class SmallChooser extends JColorChooser {
         SmallChooser(Color color) {

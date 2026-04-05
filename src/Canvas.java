@@ -104,14 +104,39 @@ public class Canvas {
         List<Pixel> pixels = new ArrayList<>();
         int row = pixel.getRow();
         int col = pixel.getCol();
-        for (int r = row-size; r <= row+size; r++) {
-            for (int c = col-size; c <= col+size; c++) {
+        if (size == -1) {
+            for (int r = row-1; r < row+2; r++) {
                 try {
-                    pixels.add(pixel.getLayer().getPixel(r,c));
-                } catch (Exception _) {}
+
+                    Pixel temp = pixel.getLayer().getPixel(r, col);
+                    if (temp == null) throw new Exception();
+                    pixels.add(temp);
+                } catch (Exception ex) {}
             }
+            for (int c = col-1; c < col+2; c++) {
+                if (c != col) {
+                    try {
+
+                        Pixel temp = pixel.getLayer().getPixel(row, c);
+                        if (temp == null) throw new Exception();
+                        pixels.add(temp);
+                    } catch (Exception ex) {}
+                }
+            }
+            return pixels;
+        } else {
+            for (int r = row - size; r <= row + size; r++) {
+                for (int c = col - size; c <= col + size; c++) {
+                    try {
+                        Pixel temp = pixel.getLayer().getPixel(r, c);
+                        if (temp == null) throw new Exception();
+                        pixels.add(temp);
+                    } catch (Exception _) {
+                    }
+                }
+            }
+            return pixels;
         }
-        return pixels;
     }
 
     public class Layers extends Selectable {
