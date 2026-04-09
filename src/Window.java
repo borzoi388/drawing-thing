@@ -5,6 +5,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.*;
+import java.lang.reflect.Executable;
 import java.util.*;
 import java.util.List;
 
@@ -130,11 +131,9 @@ public class Window {
             public void mousePressed(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1) {
                     if (pen.isFilling()) {
-                        if (pen.isFilling()) {
-                            Pixel pxl = checkPixel(e.getPoint());
-                            if (pxl == null) return;
-                            myCanvas.setLastAction(fill(pxl, pxl.getColor()));
-                        }
+                        Pixel pxl = checkPixel(e.getPoint());
+                        if (pxl == null) return;
+                        myCanvas.setLastAction(Actions.stroke(fill(pxl, pxl.getColor())));
                     } else if (!mouseDown) {
                         mouseDown = true;
                         penDown(pen.getSelectedIndex());
@@ -170,9 +169,13 @@ public class Window {
             private void draw(Point mousePos) {
                 new Thread(() -> {
                     int temp = 0;
-                    if (mousePos == null) return;
+                    if (mousePos == null) {
+                        return;
+                    }
                     Pixel currPixel = checkPixel(mousePos);
-                    if (currPixel == null) return;
+                    if (currPixel == null) {
+                        return;
+                    }
                     for (Pixel pixel:canvas.getNeighborPixels(currPixel, (pen.getSize()-1)/2)) {
                         if (!pixelsAltered.containsKey(pixel)) {
                             pixelsAltered.put(pixel, colorPixel(pixel, pen.getPenColor()));
@@ -192,6 +195,7 @@ public class Window {
             }
 
             private HashMap<Pixel, Color> fill(Pixel pixel, Color color) {
+                if (color == pen.getPenColor()) return new HashMap<>();
                 HashMap<Pixel, Color> filled = new HashMap<>();
                 for (Pixel pxl : canvas.getNeighborPixels(pixel, -1)) {
                     if (pxl.getColor() == color) {
@@ -199,7 +203,6 @@ public class Window {
                         filled.putAll(fill(pxl, color));
                     }
                 }
-                System.out.println(filled.size());
                 return filled;
             }
 
@@ -223,7 +226,7 @@ public class Window {
                     try {
                         Thread.sleep(10);
                     } catch (Exception ex) {}
-                    myCanvas.setLastAction(pixelsAltered);
+                    myCanvas.setLastAction(Actions.stroke(pixelsAltered));
                     pixelsAltered = new HashMap<>();
                 }
             }
@@ -423,7 +426,7 @@ public class Window {
         }
 
         private class LayersSection extends JPanel {
-            JButton newLayerBtn = new JButton("New Layer"), deleteLayerBtn = new JButton("Delete"), duplicateBtn = new JButton("Duplicate");
+            JButton newLayerBtn = new JButton("New Layer"), deleteLayerBtn = new JButton("Delete"), duplicateBtn = new JButton("Duplicate"), clearBtn = new JButton("Clear");
             JPanel buttonPanel = new JPanel();
             SelectablePanel layersPanel = new SelectablePanel(canvas.layerThing, SelectablePanel.BOX);
             LayersSection() {
@@ -431,19 +434,24 @@ public class Window {
 
                 newLayerBtn.addActionListener(_ -> {
                     canvas.addLayer();
+                    canvas.setLastAction(Actions.createLayer(canvas.layerThing.getSelectedIndex()));
                     layersPanel.load();
                 });
                 deleteLayerBtn.addActionListener(_ -> {
-                    canvas.deleteLayer();
+                    canvas.setLastAction(Actions.deleteLayer(canvas.deleteSelectedLayer(), canvas.layerThing.getSelectedIndex()));
                     layersPanel.load();
                 });
                 duplicateBtn.addActionListener(_ -> {
                     canvas.duplicateLayer();
                     layersPanel.load();
                 });
+                clearBtn.addActionListener(_ -> {
+                    canvas.clearLayer();
+                    layersPanel.load();
+                });
 
                 buttonPanel.setLayout(new FlowLayout());
-                for (JButton btn : new JButton[]{newLayerBtn, deleteLayerBtn, duplicateBtn}) {
+                for (JButton btn : new JButton[]{newLayerBtn, deleteLayerBtn, duplicateBtn, clearBtn}) {
                     buttonPanel.add(btn);
                 }
                 add(buttonPanel, BorderLayout.CENTER);
@@ -451,28 +459,15 @@ public class Window {
             }
         }
 
-        private Map<Pixel, Color> performAction(Map<Pixel, Color> map) {
-            Map<Pixel, Color> undoAction = new HashMap<>();
-
-            for (Pixel pixel : map.keySet()) {
-                Color prevColor = pixel.getColor();
-                pixel.setColor(map.get(pixel));
-                undoAction.put(pixel, prevColor);
-            }
-
-            return undoAction;
-        }
-
         private class UndoListener implements ActionListener {
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                Map<Pixel, Color> lastAction = canvas.getLastAction();
-                if (!lastAction.isEmpty()) {
-                    canvas.addRedoAction(performAction(lastAction));
-                }
-
-                canvasPanel.repaint();
+                try {
+                    canvas.addRedoAction(canvas.getLastAction().performAction(canvas));
+                    canvasPanel.repaint();
+                    layersSection.layersPanel.load();
+                } catch (Exception _) {}
             }
         }
 
@@ -480,11 +475,11 @@ public class Window {
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                Map<Pixel, Color> redoAction = canvas.getRedoAction();
-                if (!redoAction.isEmpty()) {
-                    canvas.setLastAction(performAction(redoAction));
-                }
-                canvasPanel.repaint();
+                try {
+                    canvas.setLastAction(canvas.getRedoAction().performAction(canvas));
+                    canvasPanel.repaint();
+                    layersSection.layersPanel.load();
+                } catch (Exception _) {}
             }
         }
 
@@ -513,7 +508,6 @@ public class Window {
         }
 
         public boolean isFilling() {
-            System.out.println(types[selectedIndex].fill);
             return types[selectedIndex].fill;
         }
 

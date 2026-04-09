@@ -7,8 +7,9 @@ public class Canvas {
     private Color bgColor;
     private int height;
     private int width;
-    private List<Map<Pixel, Color>> lastActions;
-    private List<Map<Pixel, Color>> redoActions;
+    private List<Action> lastActions;
+    private List<Action> redoActions;
+    private Map<Integer, Boolean> layerNames;
 
 
     Canvas(int h, int w, Color bg) {
@@ -17,14 +18,15 @@ public class Canvas {
 
     public void resetCanvas(int h, int w, Color bg) {
         if (h < 1 || w < 1) return;
-        layerThing = new Layers();
-        layerThing.layers.clear();
-        bgColor = bg;
-        layerThing.layers.add(new Layer(h, w, bg, "Background"));
-        layerThing.layers.add(new Layer(h, w, null, "Layer 1"));
         bgColor = bg;
         height = h;
         width = w;
+        layerThing = new Layers();
+        layerNames = new HashMap<>();
+        layerThing.layers.clear();
+        bgColor = bg;
+        layerThing.layers.add(new Layer(h, w, bg, "Background"));
+        layerThing.addLayer();
         lastActions = new ArrayList<>();
         redoActions = new ArrayList<>();
     }
@@ -33,8 +35,8 @@ public class Canvas {
         layerThing.addLayer();
     }
 
-    void deleteLayer() {
-        layerThing.deleteSelectedLayer();
+    Layer deleteSelectedLayer() {
+        return layerThing.deleteSelectedLayer();
     }
 
     void duplicateLayer() {
@@ -42,9 +44,13 @@ public class Canvas {
     }
 
     Pixel getPixel(int y, int x) {
-        for (int i = layerThing.layers.size()-1; i >= 0; i--) {
-            if (layerThing.layers.get(i).hasInitialized()) {
-                Pixel pixel = layerThing.layers.get(i).getPixel(y, x);
+        return getPixelHelper(y, x, layerThing.layers);
+    }
+
+    private Pixel getPixelHelper(int y, int x, List<Layer> layers) {
+        for (int i = layers.size()-1; i >= 0; i--) {
+            if (layers.get(i).hasInitialized()) {
+                Pixel pixel = layers.get(i).getPixel(y, x);
                 if (pixel != null) {
                     if (pixel.getColor() != null) {
                         return pixel;
@@ -52,7 +58,7 @@ public class Canvas {
                 }
             }
         }
-        return layerThing.layers.getFirst().getPixel(y, x);
+        return layers.getFirst().getPixel(y, x);
     }
 
     int getHeight() {
@@ -67,36 +73,57 @@ public class Canvas {
         return bgColor;
     }
 
-    void setLastAction(Map<Pixel, Color> map) {
-        lastActions.add(map);
+    void setLastAction(Action action) {
+        System.out.println(action.toString());
+        lastActions.add(action);
     }
 
-    Map<Pixel, Color> getLastAction() {
+    Action getLastAction() {
         try {
+            System.out.println(lastActions.getLast().toString());
             return lastActions.removeLast();
         } catch (Exception e) {
-            return new HashMap<>();
+            return null;
         }
     }
 
-    public void addRedoAction(Map<Pixel, Color> map) {
-        redoActions.add(map);
+    public void addRedoAction(Action action) {
+        redoActions.add(action);
     }
 
     public void clearRedo() {
         redoActions.clear();
     }
 
-    public Map<Pixel, Color> getRedoAction() {
+    public Action getRedoAction() {
         try {
             return redoActions.removeLast();
         } catch (Exception e) {
-            return new HashMap<>();
+            return null;
         }
     }
 
     public Layer getSelectedLayer() {
         return layerThing.layers.get(layerThing.getSelectedIndex()+1);
+    }
+
+    public Layer getLayer(int i) {
+        return layerThing.layers.get(i);
+    }
+
+    public Layer deleteLayer(int i) {
+        if (layerThing.getSelectedIndex() == i) {
+
+        }
+        return layerThing.layers.remove(i);
+    }
+
+    public void clearLayer() {
+        layerThing.clearLayer();
+    }
+
+    public void insertLayer(int index, Layer layer) {
+        layerThing.insertLayer(index, layer);
     }
 
     public List<Pixel> getNeighborPixels(Pixel pixel, int size) {
@@ -143,7 +170,7 @@ public class Canvas {
         List<Layer> layers = new LinkedList<>();
 
         Layers() {
-            selectedIndex = 1;
+            selectedIndex = 0;
         }
         @Override
         public List<String> getSelectables() {
@@ -154,17 +181,44 @@ public class Canvas {
             return names;
         }
 
-        public void deleteSelectedLayer() {
+        public void clearLayer() {
+            layers.set(selectedIndex, new Layer(height, width, null, layers.get(selectedIndex).getName()));
+        }
+
+        public void insertLayer(int index, Layer layer) {
+            layers.add(index, layer);
+        }
+
+        public Layer deleteSelectedLayer() {
             if (layers.size()>2) {
-                layers.remove(selectedIndex);
+                int num = checkRenaming(layers.get(selectedIndex).getName());
+                if (num != 0) { layerNames.remove(num); }
+                Layer temp = layers.remove(selectedIndex);
                 if (selectedIndex != 1) {
                     selectedIndex--;
                 }
+                return temp;
+            }
+            return null;
+        }
+
+        private int checkRenaming(String name) {
+            if (name.indexOf("Layer ") == 0) {
+                try {
+                    return Integer.parseInt(name.substring(6));
+                } catch (NumberFormatException ex) {
+                    return 0;
+                }
+            } else {
+                return 0;
             }
         }
 
         public void addLayer() {
-            layers.add(selectedIndex+1, new Layer(height, width, null, "Layer "+(layers.size())));
+            int num = 1;
+            while (layerNames.containsKey(num)) num++;
+            layerNames.put(num, true);
+            layers.add(selectedIndex+1, new Layer(height, width, null, "Layer "+num));
             selectedIndex++;
         }
 
