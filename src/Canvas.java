@@ -30,7 +30,6 @@ public class Canvas {
         lastActions = new ArrayList<>();
         redoActions = new ArrayList<>();
     }
-
     void addLayer() {
         layerThing.addLayer();
     }
@@ -106,21 +105,10 @@ public class Canvas {
     public Layer getSelectedLayer() {
         return layerThing.layers.get(layerThing.getSelectedIndex()+1);
     }
-
-    public Layer getLayer(int i) {
-        return layerThing.layers.get(i);
-    }
-
     public Layer deleteLayer(int i) {
-        if (layerThing.getSelectedIndex() == i) {
-
-        }
-        return layerThing.layers.remove(i);
+        return layerThing.deleteLayer(i);
     }
 
-    public void clearLayer() {
-        layerThing.clearLayer();
-    }
 
     public void insertLayer(int index, Layer layer) {
         layerThing.insertLayer(index, layer);
@@ -181,9 +169,13 @@ public class Canvas {
             return names;
         }
 
-        public void clearLayer() {
-            layers.set(selectedIndex, new Layer(height, width, null, layers.get(selectedIndex).getName()));
+        Layer deleteLayer(int i) {
+            if (selectedIndex == layers.size()-1) {
+                selectedIndex--;
+            }
+            return layers.remove(i);
         }
+
 
         public void insertLayer(int index, Layer layer) {
             layers.add(index, layer);

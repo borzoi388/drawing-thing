@@ -8,15 +8,11 @@ public class Actions {
     }
 
     public static Action deleteLayer(Layer layer, int index) {
-        return new DeleteLayer(layer, index, 0);
+        return new DeleteLayer(layer, index+1, 0);
     }
 
     public static Action createLayer(int index) {
         return new CreateLayer(index);
-    }
-
-    public static Action emptyAction() {
-        return canvas -> null;
     }
 
     private static class StrokeAction implements Action {
@@ -30,9 +26,7 @@ public class Actions {
             Map<Pixel, Color> undoAction = new HashMap<>();
 
             for (Pixel pixel : map.keySet()) {
-                Color prevColor = pixel.getColor();
-                pixel.setColor(map.get(pixel));
-                undoAction.put(pixel, prevColor);
+                undoAction.put(pixel, pixel.setColor(map.get(pixel)));
             }
 
             return new StrokeAction(undoAction);

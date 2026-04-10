@@ -12,7 +12,7 @@ import java.util.List;
 public class Window {
     private JFrame window;
     private Canvas canvas;
-    private Canvas defaultCanvas = new Canvas(20, 20, Color.white);
+    private Canvas defaultCanvas = new Canvas(50, 50, Color.white);
 
 
     private Pen pen = new Pen();
@@ -122,6 +122,7 @@ public class Window {
             volatile private boolean isRunning = false;
             volatile Map<Pixel, Color> pixelsAltered = new HashMap<>();
 
+            volatile Pixel lastPixel;
 
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -167,31 +168,71 @@ public class Window {
             }
 
             private void draw(Point mousePos) {
+                int temp = 0;
+                if (mousePos == null) {
+                    return;
+                }
+                Pixel currPixel = checkPixel(mousePos);
+                if (currPixel == null) {
+                    return;
+                }
+                temp+=drawOnPixel(currPixel);
+                fillLine(lastPixel, currPixel);
+                lastPixel = currPixel;
+
+                if (temp > 0) {
+                    canvas.clearRedo();
+                }
+            }
+
+            private void fillLine(Pixel lastPixel, Pixel currPixel) {
                 new Thread(() -> {
-                    int temp = 0;
-                    if (mousePos == null) {
-                        return;
-                    }
-                    Pixel currPixel = checkPixel(mousePos);
-                    if (currPixel == null) {
-                        return;
-                    }
-                    for (Pixel pixel:canvas.getNeighborPixels(currPixel, (pen.getSize()-1)/2)) {
-                        if (!pixelsAltered.containsKey(pixel)) {
-                            pixelsAltered.put(pixel, colorPixel(pixel, pen.getPenColor()));
+                    if (lastPixel != null && lastPixel != currPixel) {
+                        int changeX = currPixel.getCol() - lastPixel.getCol();
+                        int changeY = currPixel.getRow() - lastPixel.getRow();
+                        System.out.println(lastPixel);
+                        System.out.println(currPixel);
+                        LineMaker lineMaker = new LineMaker(lastPixel.getCol(), currPixel.getCol(), lastPixel.getRow(), currPixel.getRow());
+                        if (changeX != 0 && changeY != 0) {
+                            if (Math.abs(changeX) >= Math.abs(changeY)) {
+                                for (int i = Math.min(lastPixel.getCol(), currPixel.getCol()); i < Math.max(lastPixel.getCol(), currPixel.getCol()); i++) {
+                                    Pixel pixel = canvas.getSelectedLayer().getPixel(lineMaker.calcByX(i), i);
+                                    drawOnPixel(pixel);
+                                }
+                            } else {
+                                for (int i = Math.min(lastPixel.getRow(), currPixel.getRow()); i < Math.max(lastPixel.getRow(), currPixel.getRow()); i++) {
+                                    Pixel pixel = canvas.getSelectedLayer().getPixel(i, lineMaker.calcByY(i));
+                                    drawOnPixel(pixel);
+                                }
+                            }
+                        } else if (changeY != 0) {
+                            for (int i = Math.min(lastPixel.getRow(), currPixel.getRow()); i < Math.max(lastPixel.getRow(), currPixel.getRow()); i++) {
+                                Pixel pixel = canvas.getSelectedLayer().getPixel(i, currPixel.getCol());
+                                drawOnPixel(pixel);
+                            }
+                        } else if (changeX != 0) {
+                            for (int i = Math.min(lastPixel.getCol(), currPixel.getCol()); i < Math.max(lastPixel.getCol(), currPixel.getCol()); i++) {
+                                Pixel pixel = canvas.getSelectedLayer().getPixel(currPixel.getRow(), i);
+                                drawOnPixel(pixel);
+                            }
                         }
-                        temp++;
-                    }
-                    if (temp > 0) {
-                        canvas.clearRedo();
                     }
                 }).start();
             }
 
-            private Color colorPixel(Pixel pixel, Color color) {
-                Color temp = pixel.getColor();
-                pixel.setColor(color);
+            private int drawOnPixel(Pixel currPixel) {
+                int temp = 0;
+                for (Pixel pixel:canvas.getNeighborPixels(currPixel, (pen.getSize()-1)/2)) {
+                    if (!pixelsAltered.containsKey(pixel)) {
+                        pixelsAltered.put(pixel, colorPixel(pixel, pen.getPenColor()));
+                    }
+                    temp++;
+                }
                 return temp;
+            }
+
+            private Color colorPixel(Pixel pixel, Color color) {
+                return pixel.setColor(color);
             }
 
             private HashMap<Pixel, Color> fill(Pixel pixel, Color color) {
@@ -211,6 +252,7 @@ public class Window {
                     new Thread(() -> {
                         if (type < 2) {
                             mouseDown = true;
+                            lastPixel = null;
                             while (mouseDown) {
                                 draw(getMousePosition());
                             }
@@ -238,7 +280,7 @@ public class Window {
 
             @Override
             public void mouseEntered(MouseEvent e) {
-
+                if (mouseDown) release(e);
             }
 
             @Override
@@ -446,7 +488,14 @@ public class Window {
                     layersPanel.load();
                 });
                 clearBtn.addActionListener(_ -> {
-                    canvas.clearLayer();
+                    Map<Pixel, Color> map = new HashMap<>();
+                    for (int x = 0; x < canvas.getWidth(); x++) {
+                        for (int y = 0; y < canvas.getHeight(); y++) {
+                            Pixel pixel = canvas.getSelectedLayer().getPixel(y, x);
+                            map.put(pixel, pixel.setColor(null));
+                        }
+                    }
+                    canvas.setLastAction(Actions.stroke(map));
                     layersPanel.load();
                 });
 
@@ -648,6 +697,29 @@ public class Window {
                 load();
                 repaint();
             }
+        }
+    }
+
+    private class LineMaker {
+        int x1, x2, y1, y2;
+        long b;
+        double slope;
+
+        LineMaker(int x1, int x2, int y1, int y2) {
+            this.x1 = x1;
+            this.x2 = x2;
+            this.y1 = y1;
+            this.y2 = y2;
+            slope = (double)(y1-y2)/(x1-x2);
+            b = Math.round(-1 * (slope * x1 - y1));
+        }
+
+        int calcByX(int x) {
+            return (int)Math.round(x*slope+b);
+        }
+
+        int calcByY(int y) {
+            return (int)Math.round((y-b)/slope);
         }
     }
 }

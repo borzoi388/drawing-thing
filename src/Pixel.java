@@ -12,8 +12,10 @@ public class Pixel {
         this.col = c;
         this.layer = layer;
     }
-    void setColor(Color newColor) {
+    Color setColor(Color newColor) {
+        Color temp = color;
         color = newColor;
+        return temp;
     }
 
     Layer getLayer() {
