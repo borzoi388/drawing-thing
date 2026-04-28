@@ -1,18 +1,21 @@
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.colorchooser.AbstractColorChooserPanel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.*;
-import java.lang.reflect.Executable;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
 public class Window {
     private JFrame window;
     private Canvas canvas;
-    private Canvas defaultCanvas = new Canvas(50, 50, Color.white);
+    private Canvas defaultCanvas = new Canvas(100, 100, Color.white);
 
 
     private Pen pen = new Pen();
@@ -98,11 +101,7 @@ public class Window {
             }
 
             public void componentMoved(ComponentEvent e) {}
-
-            @Override
             public void componentShown(ComponentEvent e) {}
-
-            @Override
             public void componentHidden(ComponentEvent e) {}
         }
 
@@ -122,7 +121,7 @@ public class Window {
             volatile private boolean isRunning = false;
             volatile Map<Pixel, Color> pixelsAltered = new HashMap<>();
 
-            volatile Pixel lastPixel;
+            volatile Coord lastPixel;
 
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -132,7 +131,7 @@ public class Window {
             public void mousePressed(MouseEvent e) {
                 if (e.getButton() == MouseEvent.BUTTON1) {
                     if (pen.isFilling()) {
-                        Pixel pxl = checkPixel(e.getPoint());
+                        Pixel pxl = canvas.getSelectedLayer().getPixel(checkPixel(e.getPoint()).getRow(), checkPixel(e.getPoint()).getCol());
                         if (pxl == null) return;
                         myCanvas.setLastAction(Actions.stroke(fill(pxl, pxl.getColor())));
                     } else if (!mouseDown) {
@@ -143,12 +142,12 @@ public class Window {
 
             }
 
-            private Pixel checkPixel(Point mousePos) {
+            private Coord checkPixel(Point mousePos) {
                 if (mousePos.x > offsetX && mousePos.x < getWidth()-offsetX && mousePos.y < getHeight()-offsetY && mousePos.y > offsetY) {
                     repaint();
                     return myCanvas.getSelectedLayer().getPixel((mousePos.y-offsetY)/pixelSize, (mousePos.x-offsetX)/pixelSize);
                 } else {
-                    return null;
+                    return new Coord( (mousePos.x-offsetX)/pixelSize, (mousePos.y-offsetY)/pixelSize);
                 }
             }
 
@@ -172,12 +171,12 @@ public class Window {
                 if (mousePos == null) {
                     return;
                 }
-                Pixel currPixel = checkPixel(mousePos);
-                if (currPixel == null) {
-                    return;
+                Coord currPixel = checkPixel(mousePos);
+
+                temp+=drawOnPixel(checkPixel(mousePos));
+                if (lastPixel != null && currPixel != null) {
+                    fillLine(lastPixel, currPixel);
                 }
-                temp+=drawOnPixel(currPixel);
-                fillLine(lastPixel, currPixel);
                 lastPixel = currPixel;
 
                 if (temp > 0) {
@@ -185,46 +184,45 @@ public class Window {
                 }
             }
 
-            private void fillLine(Pixel lastPixel, Pixel currPixel) {
+            private void fillLine(Coord lastPixel, Coord currPixel) {
                 new Thread(() -> {
                     if (lastPixel != null && lastPixel != currPixel) {
                         int changeX = currPixel.getCol() - lastPixel.getCol();
                         int changeY = currPixel.getRow() - lastPixel.getRow();
-                        System.out.println(lastPixel);
-                        System.out.println(currPixel);
                         LineMaker lineMaker = new LineMaker(lastPixel.getCol(), currPixel.getCol(), lastPixel.getRow(), currPixel.getRow());
                         if (changeX != 0 && changeY != 0) {
                             if (Math.abs(changeX) >= Math.abs(changeY)) {
-                                for (int i = Math.min(lastPixel.getCol(), currPixel.getCol()); i < Math.max(lastPixel.getCol(), currPixel.getCol()); i++) {
-                                    Pixel pixel = canvas.getSelectedLayer().getPixel(lineMaker.calcByX(i), i);
-                                    drawOnPixel(pixel);
+                                for (int i = Math.min(lastPixel.getCol(), currPixel.getCol())+1; i < Math.max(lastPixel.getCol(), currPixel.getCol()); i++) {
+                                    drawOnPixel(new Coord(i, lineMaker.calcByX(i)));
                                 }
                             } else {
-                                for (int i = Math.min(lastPixel.getRow(), currPixel.getRow()); i < Math.max(lastPixel.getRow(), currPixel.getRow()); i++) {
-                                    Pixel pixel = canvas.getSelectedLayer().getPixel(i, lineMaker.calcByY(i));
-                                    drawOnPixel(pixel);
+                                for (int i = Math.min(lastPixel.getRow(), currPixel.getRow())+1; i < Math.max(lastPixel.getRow(), currPixel.getRow()); i++) {
+                                    drawOnPixel(new Coord(lineMaker.calcByY(i), i));
                                 }
                             }
                         } else if (changeY != 0) {
                             for (int i = Math.min(lastPixel.getRow(), currPixel.getRow()); i < Math.max(lastPixel.getRow(), currPixel.getRow()); i++) {
-                                Pixel pixel = canvas.getSelectedLayer().getPixel(i, currPixel.getCol());
-                                drawOnPixel(pixel);
+                                drawOnPixel(new Coord(currPixel.getCol(), i));
                             }
                         } else if (changeX != 0) {
                             for (int i = Math.min(lastPixel.getCol(), currPixel.getCol()); i < Math.max(lastPixel.getCol(), currPixel.getCol()); i++) {
-                                Pixel pixel = canvas.getSelectedLayer().getPixel(currPixel.getRow(), i);
-                                drawOnPixel(pixel);
+                                drawOnPixel(new Coord(i, currPixel.getRow()));
                             }
                         }
                     }
                 }).start();
             }
 
-            private int drawOnPixel(Pixel currPixel) {
+            private int drawOnPixel(Coord thing) {
+                return drawOnPixel(thing, pen.getPenColor());
+            }
+
+            private int drawOnPixel(Coord thing, Color col) {
                 int temp = 0;
-                for (Pixel pixel:canvas.getNeighborPixels(currPixel, (pen.getSize()-1)/2)) {
+                for (Pixel pixel:canvas.getNeighborPixels(thing, (pen.getSize()-1)/2)) {
                     if (!pixelsAltered.containsKey(pixel)) {
-                        pixelsAltered.put(pixel, colorPixel(pixel, pen.getPenColor()));
+                        pixelsAltered.put(pixel, colorPixel(pixel, col));
+                        repaint();
                     }
                     temp++;
                 }
@@ -315,12 +313,14 @@ public class Window {
         CanvasPanel smallCanvasPanel;
         int isValid = 0;
 
+        int MAX_CANVAS_SIZE = 100;
         CanvasDialog() {
             widthTextField = new JTextField(defaultCanvas.getWidth()+"", 4);
             heightTextField = new JTextField(defaultCanvas.getHeight()+"", 4);
             colorChooser = new SmallChooser(defaultCanvas.getBgColor());
             newCanvas = defaultCanvas;
             smallCanvasPanel = new CanvasPanel(newCanvas);
+
 
             for (JTextField textField : new JTextField[]{widthTextField, heightTextField}) {
                 textField.getDocument().addDocumentListener(new DocumentListener() {
@@ -366,7 +366,7 @@ public class Window {
             int tempWidth = 0, tempHeight = 0;
             try {
                 tempWidth = Integer.parseInt(heightTextField.getText());
-                if (tempWidth < 1 || tempWidth > 100) {
+                if (tempWidth < 1 || tempWidth > MAX_CANVAS_SIZE) {
                     throw new Exception();
                 }
                 heightTextField.setBorder(BorderFactory.createEmptyBorder());
@@ -376,7 +376,7 @@ public class Window {
             }
             try {
                 tempHeight = Integer.parseInt(widthTextField.getText());
-                if (tempHeight < 1 || tempHeight > 100) {
+                if (tempHeight < 1 || tempHeight > MAX_CANVAS_SIZE) {
                     throw new Exception();
                 }
                 widthTextField.setBorder(BorderFactory.createEmptyBorder());
@@ -432,7 +432,7 @@ public class Window {
     }
 
     private class PenSettingsPanel extends JPanel {
-        JButton undoButton, newCanvasBtn, redoBtn;
+        JButton undoButton, newCanvasBtn, redoBtn, saveBtn;
         JSlider penSizeSlider;
         SmallChooser colorChooser;
         LayersSection layersSection = new LayersSection();
@@ -442,8 +442,9 @@ public class Window {
             setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
             undoButton = new JButton("Undo");
             undoButton.addActionListener(new UndoListener());
+            saveBtn = new SaveBtn();
 
-            penSizeSlider = new JSlider(JSlider.HORIZONTAL,1,9,1);
+            penSizeSlider = new JSlider(JSlider.HORIZONTAL,1,21,1);
             penSizeSlider.setMajorTickSpacing(2);
             penSizeSlider.setSnapToTicks(true);
             penSizeSlider.addChangeListener(_ -> pen.setSize(penSizeSlider.getValue()));
@@ -458,6 +459,7 @@ public class Window {
             colorChooser.getSelectionModel().addChangeListener(_ -> {
                 pen.penColor = colorChooser.getColor();
             });
+            add(saveBtn);
             add(colorChooser);
             add(penPanel);
             add(penSizeSlider);
@@ -465,6 +467,116 @@ public class Window {
             add(redoBtn);
             add(layersSection);
             add(newCanvasBtn);
+        }
+
+        private class SaveBtn extends JButton {
+            SaveBtn() {
+                super("save");
+                addActionListener(_ -> {
+                    new SaveDialog().display();
+                });
+            }
+        }
+
+        private class SaveDialog extends JDialog implements ActionListener {
+            JButton save, cancel;
+            JPanel panel, panel2, panel3;
+            JTextField text, scale;
+            Integer realScale = 1;
+
+            SaveDialog() {
+                setTitle("Save");
+                getContentPane().setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
+                text = new JTextField(12);
+                scale = new JTextField(realScale.toString(), 4);
+                save = new JButton("Save");
+                cancel = new JButton("Cancel");
+
+                scale.getDocument().addDocumentListener(new DocumentListener() {
+                    @Override
+                    public void insertUpdate(DocumentEvent e) {
+                        checkScale();
+                    }
+
+                    @Override
+                    public void removeUpdate(DocumentEvent e) {
+                        checkScale();
+                    }
+
+                    @Override
+                    public void changedUpdate(DocumentEvent e) {
+                        checkScale();
+                    }
+                });
+
+                panel = new JPanel();
+                panel.setLayout(new FlowLayout());
+                panel.add(cancel);
+                panel.add(save);
+
+                panel2 = new JPanel();
+                panel2.setLayout(new FlowLayout());
+                panel2.add(new JLabel("Save as: "));
+                panel2.add(text);
+
+                panel3 = new JPanel();
+                panel3.setLayout(new FlowLayout());
+                panel3.add(new JLabel("Scale: "));
+                panel3.add(scale);
+                panel3.add(new JLabel("x"));
+
+                save.addActionListener(this);
+                cancel.addActionListener(_ -> {
+                    dispose();
+                });
+
+                add(panel2, BorderLayout.NORTH);
+                add(panel3, BorderLayout.CENTER);
+                add(panel, BorderLayout.SOUTH);
+                pack();
+            }
+
+            void display() {
+                setLocationRelativeTo(null);
+                setModal(true);
+                setVisible(true);
+            }
+
+            void checkScale() {
+                int tempScale = realScale;
+                try {
+                    tempScale = Integer.parseInt(scale.getText());
+                    if (tempScale < 1) {
+                        throw new Exception();
+                    }
+                    scale.setBorder(BorderFactory.createEmptyBorder());
+                } catch (Exception ex) {
+                    scale.setBorder(BorderFactory.createLineBorder(Color.red));
+                }
+                realScale = tempScale;
+            }
+
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    File file = new File(text.getText()+".png");
+                    if (!file.createNewFile()) {
+                        JOptionPane.showMessageDialog(this, "File already exists");
+                    } else {
+                        BufferedImage img = new BufferedImage(canvas.getWidth()*realScale, canvas.getHeight()*realScale, BufferedImage.TYPE_INT_RGB);
+                        Graphics pen = img.createGraphics();
+                        for (int x = 0; x < canvas.getWidth(); x++) {
+                            for (int y = 0; y < canvas.getHeight(); y++) {
+                                pen.setColor(canvas.getPixel(y, x).getColor());
+                                pen.fillRect(x*realScale, y*realScale, realScale, realScale);
+                            }
+                        }
+                        ImageIO.write(img, "png", file);
+                        dispose();
+                    }
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
         }
 
         private class LayersSection extends JPanel {
@@ -485,6 +597,7 @@ public class Window {
                 });
                 duplicateBtn.addActionListener(_ -> {
                     canvas.duplicateLayer();
+                    canvas.setLastAction(Actions.createLayer(canvas.layerThing.getSelectedIndex()));
                     layersPanel.load();
                 });
                 clearBtn.addActionListener(_ -> {
@@ -628,7 +741,7 @@ public class Window {
         SmallChooser(Color color) {
             super(color);
             setPreviewPanel(new JPanel());
-            AbstractColorChooserPanel thingy = getChooserPanels()[2];
+            AbstractColorChooserPanel thingy = getChooserPanels()[1];
             for (AbstractColorChooserPanel panel : getChooserPanels()) {
                 removeChooserPanel(panel);
             }

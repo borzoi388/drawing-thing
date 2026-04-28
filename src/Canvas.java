@@ -25,7 +25,9 @@ public class Canvas {
         layerNames = new HashMap<>();
         layerThing.layers.clear();
         bgColor = bg;
-        layerThing.layers.add(new Layer(h, w, bg, "Background"));
+        System.out.println("Height: "+height);
+        System.out.println("WIdht: "+width);
+        layerThing.layers.add(new Layer(height, width, bg, "Background")); //heehee
         layerThing.addLayer();
         lastActions = new ArrayList<>();
         redoActions = new ArrayList<>();
@@ -73,13 +75,11 @@ public class Canvas {
     }
 
     void setLastAction(Action action) {
-        System.out.println(action.toString());
         lastActions.add(action);
     }
 
     Action getLastAction() {
         try {
-            System.out.println(lastActions.getLast().toString());
             return lastActions.removeLast();
         } catch (Exception e) {
             return null;
@@ -114,16 +114,25 @@ public class Canvas {
         layerThing.insertLayer(index, layer);
     }
 
-    public List<Pixel> getNeighborPixels(Pixel pixel, int size) {
-        if (size == 0) return new ArrayList<>(List.of(new Pixel[]{pixel}));
+    public List<Pixel> getNeighborPixels(Coord thing, int size) {
         List<Pixel> pixels = new ArrayList<>();
-        int row = pixel.getRow();
-        int col = pixel.getCol();
+        int row = thing.getRow();
+        int col = thing.getCol();
+
+        Layer layer = layerThing.layers.get(layerThing.getSelectedIndex()+1);
+        if (size == 0) {
+            try {
+                Pixel pixel = layer.getPixel(row, col);
+                if (pixel == null) throw new Exception();
+                pixels.add(pixel);
+            } catch (Exception _) {}
+            return pixels;
+        }
         if (size == -1) {
             for (int r = row-1; r < row+2; r++) {
                 try {
 
-                    Pixel temp = pixel.getLayer().getPixel(r, col);
+                    Pixel temp = layer.getPixel(r, col);
                     if (temp == null) throw new Exception();
                     pixels.add(temp);
                 } catch (Exception ex) {}
@@ -132,7 +141,7 @@ public class Canvas {
                 if (c != col) {
                     try {
 
-                        Pixel temp = pixel.getLayer().getPixel(row, c);
+                        Pixel temp = layer.getPixel(row, c);
                         if (temp == null) throw new Exception();
                         pixels.add(temp);
                     } catch (Exception ex) {}
@@ -143,7 +152,7 @@ public class Canvas {
             for (int r = row - size; r <= row + size; r++) {
                 for (int c = col - size; c <= col + size; c++) {
                     try {
-                        Pixel temp = pixel.getLayer().getPixel(r, c);
+                        Pixel temp = layer.getPixel(r, c);
                         if (temp == null) throw new Exception();
                         pixels.add(temp);
                     } catch (Exception _) {

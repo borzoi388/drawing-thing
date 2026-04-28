@@ -11,7 +11,7 @@ public class Layer {
         this.size = new Dimension(w, h);
         for (int i = 0; i < h; i++) {
             for (int j = 0; j < w; j++) {
-                layer[i][j] = new Pixel(color, i, j, this);
+                layer[i][j] = new Pixel(color, i, j);
             }
         }
     }
@@ -24,15 +24,17 @@ public class Layer {
         this.size = layer.getSize();
         for (int i = 0; i < h; i++) {
             for (int j = 0; j < w; j++) {
-                this.layer[i][j] = new Pixel(layer.getPixel(i,j).getColor(), i, j, this);
+                this.layer[i][j] = new Pixel(layer.getPixel(i,j).getColor(), i, j);
             }
         }
     }
 
     public Pixel getPixel(int y, int x) {
-        if (y >= layer.length || x >= layer.length) { return null; }
+        if (y >= layer.length || x >= layer[0].length || x < 0 || y < 0) { return null; }
         return layer[y][x];
     }
+
+    // 67
 
     public boolean hasInitialized() {
         return (layer != null);
