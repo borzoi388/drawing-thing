@@ -25,8 +25,6 @@ public class Canvas {
         layerNames = new HashMap<>();
         layerThing.layers.clear();
         bgColor = bg;
-        System.out.println("Height: "+height);
-        System.out.println("WIdht: "+width);
         layerThing.layers.add(new Layer(height, width, bg, "Background")); //heehee
         layerThing.addLayer();
         lastActions = new ArrayList<>();

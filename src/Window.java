@@ -4,6 +4,8 @@ import javax.swing.*;
 import javax.swing.colorchooser.AbstractColorChooserPanel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileFilter;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
@@ -471,7 +473,7 @@ public class Window {
 
         private class SaveBtn extends JButton {
             SaveBtn() {
-                super("save");
+                super("Save");
                 addActionListener(_ -> {
                     new SaveDialog().display();
                 });
@@ -480,14 +482,15 @@ public class Window {
 
         private class SaveDialog extends JDialog implements ActionListener {
             JButton save, cancel;
-            JPanel panel, panel2, panel3;
+            JPanel panel, panel3;
             JTextField text, scale;
             Integer realScale = 1;
 
             SaveDialog() {
-                setTitle("Save");
+                setTitle("Save...");
                 getContentPane().setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
                 text = new JTextField(12);
+
                 scale = new JTextField(realScale.toString(), 4);
                 save = new JButton("Save");
                 cancel = new JButton("Cancel");
@@ -514,11 +517,6 @@ public class Window {
                 panel.add(cancel);
                 panel.add(save);
 
-                panel2 = new JPanel();
-                panel2.setLayout(new FlowLayout());
-                panel2.add(new JLabel("Save as: "));
-                panel2.add(text);
-
                 panel3 = new JPanel();
                 panel3.setLayout(new FlowLayout());
                 panel3.add(new JLabel("Scale: "));
@@ -530,7 +528,6 @@ public class Window {
                     dispose();
                 });
 
-                add(panel2, BorderLayout.NORTH);
                 add(panel3, BorderLayout.CENTER);
                 add(panel, BorderLayout.SOUTH);
                 pack();
@@ -558,21 +555,19 @@ public class Window {
 
             public void actionPerformed(ActionEvent e) {
                 try {
-                    File file = new File(text.getText()+".png");
-                    if (!file.createNewFile()) {
-                        JOptionPane.showMessageDialog(this, "File already exists");
-                    } else {
-                        BufferedImage img = new BufferedImage(canvas.getWidth()*realScale, canvas.getHeight()*realScale, BufferedImage.TYPE_INT_RGB);
-                        Graphics pen = img.createGraphics();
-                        for (int x = 0; x < canvas.getWidth(); x++) {
-                            for (int y = 0; y < canvas.getHeight(); y++) {
-                                pen.setColor(canvas.getPixel(y, x).getColor());
-                                pen.fillRect(x*realScale, y*realScale, realScale, realScale);
-                            }
+                    BufferedImage img = new BufferedImage(canvas.getWidth()*realScale, canvas.getHeight()*realScale, BufferedImage.TYPE_INT_RGB);
+                    Graphics pen = img.createGraphics();
+                    for (int x = 0; x < canvas.getWidth(); x++) {
+                        for (int y = 0; y < canvas.getHeight(); y++) {
+                            pen.setColor(canvas.getPixel(y, x).getColor());
+                            pen.fillRect(x*realScale, y*realScale, realScale, realScale);
                         }
-                        ImageIO.write(img, "png", file);
-                        dispose();
                     }
+                    JFileChooser chooser = new JFileChooser();
+                    if (chooser.showSaveDialog(window) == JFileChooser.APPROVE_OPTION) {
+                        ImageIO.write(img, "png", new File(chooser.getSelectedFile().toString()+".png"));
+                    }
+                    dispose();
                 } catch (IOException ex) {
                     throw new RuntimeException(ex);
                 }
@@ -718,10 +713,6 @@ public class Window {
 
             void setSize(int size) {
                 this.size = size;
-            }
-
-            void incrementSize(int inc) {
-                this.size+=inc;
             }
         }
         public void select(int num) {
